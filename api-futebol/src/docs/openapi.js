@@ -9,13 +9,13 @@ const openApiSpec = {
       '(passes, dribles, finalizacoes, interceptacoes, cartoes, minutos jogados) e calculo automatico ' +
       'de precisoes e nota de desempenho por partida (escala 1.0 a 10.0).',
   },
-  servers: [
+ servers: [
     {
-      url: 'https://brasileirao-stats-backend.railway.run.app',
+      url: 'https://brasileirao-stats-backend.railway.run.app', 
       description: 'Ambiente cloud',
     },
     {
-      url: 'http:localhost:3030',
+      url: 'http://localhost:3000',
       description: 'Ambiente local',
     }
   ],
