@@ -10,14 +10,16 @@ const openApiSpec = {
       'de precisoes e nota de desempenho por partida (escala 1.0 a 10.0).',
   },
  servers: [
+    servers: [
     {
-      url: 'https://brasileirao-stats-backend.railway.run.app', 
-      description: 'Ambiente cloud',
+      url: '/',
+      description: 'Servidor Atual',
     },
     {
       url: 'http://localhost:3000',
       description: 'Ambiente local',
     }
+  ],
   ],
   tags: [
     { name: 'Jogadores', description: 'Gerenciamento de jogadores e importacao massiva' },
