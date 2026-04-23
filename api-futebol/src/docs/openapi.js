@@ -19,7 +19,6 @@ const openApiSpec = {
       description: 'Ambiente local',
     }
   ],
-  ],
   tags: [
     { name: 'Jogadores', description: 'Gerenciamento de jogadores e importacao massiva' },
     { name: 'Times', description: 'Gerenciamento de times e seus elencos' },
