@@ -2,6 +2,7 @@ const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
 const express = require('express');
+const cors = require('cors');
 const swaggerUi = require('swagger-ui-express');
 const jogadoresRoutes = require('./routes/jogadores');
 const timesRoutes = require('./routes/times');
@@ -14,6 +15,7 @@ const openApiSpec = require('./docs/openapi');
 const app = express();
 
 app.use(requestLogger);
+app.use(cors());
 app.use(express.json());
 
 app.use('/api/jogadores', jogadoresRoutes);
