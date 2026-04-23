@@ -9,8 +9,7 @@ const openApiSpec = {
       '(passes, dribles, finalizacoes, interceptacoes, cartoes, minutos jogados) e calculo automatico ' +
       'de precisoes e nota de desempenho por partida (escala 1.0 a 10.0).',
   },
- servers: [
-    servers: [
+  servers: [
     {
       url: '/',
       description: 'Servidor Atual',
