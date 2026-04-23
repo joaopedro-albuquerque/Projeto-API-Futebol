@@ -11,7 +11,7 @@ const openApiSpec = {
   },
   servers: [
     {
-      url: 'http://brasileirao-stats-backend.railway.run.app',
+      url: 'https://brasileirao-stats-backend.railway.run.app',
       description: 'Ambiente cloud',
     },
     {
