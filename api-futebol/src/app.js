@@ -17,9 +17,10 @@ const { buildOpenApiSpec } = require('./docs/buildOpenApi');
 const app = express();
 
 app.use(cors({
-  origin: 'https://brasileirao-stats-backend.up.railway.app/',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  origin: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  credentials: true
 }));
 app.use(requestLogger);
 app.use(express.json());
