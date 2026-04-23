@@ -11,7 +11,7 @@ const openApiSpec = {
   },
   servers: [
     {
-      url: 'http://localhost:3000',
+      url: 'http://brasileirao-stats-backend.railway.run.app',
       description: 'Ambiente local',
     },
   ],
