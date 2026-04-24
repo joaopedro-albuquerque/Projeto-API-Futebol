@@ -47,15 +47,24 @@ const createPlayer = async (req, res, next) => {
 
 const getAllPlayers = async (req, res, next) => {
   try {
-    const result = await query(
-      `
-        SELECT id, nome, idade, time_id, posicao, valor_mercado
-        FROM jogadores
-        ORDER BY id ASC
-      `
-    );
+    const page   = Math.max(1, parseInt(req.query.page,  10) || 1);
+    const limit  = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const offset = (page - 1) * limit;
 
-    return res.json(result.rows);
+    const [dataResult, countResult] = await Promise.all([
+      query(
+        `SELECT id, nome, idade, time_id, posicao, valor_mercado
+         FROM jogadores ORDER BY id ASC LIMIT $1 OFFSET $2`,
+        [limit, offset]
+      ),
+      query('SELECT COUNT(*) FROM jogadores'),
+    ]);
+
+    const total = parseInt(countResult.rows[0].count, 10);
+    return res.json({
+      data: dataResult.rows,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    });
   } catch (error) {
     return next(error);
   }
@@ -63,23 +72,29 @@ const getAllPlayers = async (req, res, next) => {
 
 const searchPlayers = async (req, res, next) => {
   try {
-    const nome = String(req.query.nome || '').trim();
+    const nome   = String(req.query.nome || '').trim();
+    const page   = Math.max(1, parseInt(req.query.page,  10) || 1);
+    const limit  = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const offset = (page - 1) * limit;
 
     if (!nome) {
       return res.status(400).json({ message: 'Informe o parametro nome para pesquisa.' });
     }
 
-    const result = await query(
-      `
-        SELECT id, nome, idade, time_id, posicao, valor_mercado
-        FROM jogadores
-        WHERE nome ILIKE $1
-        ORDER BY id ASC
-      `,
-      [`%${nome}%`]
-    );
+    const [dataResult, countResult] = await Promise.all([
+      query(
+        `SELECT id, nome, idade, time_id, posicao, valor_mercado
+         FROM jogadores WHERE nome ILIKE $1 ORDER BY id ASC LIMIT $2 OFFSET $3`,
+        [`%${nome}%`, limit, offset]
+      ),
+      query('SELECT COUNT(*) FROM jogadores WHERE nome ILIKE $1', [`%${nome}%`]),
+    ]);
 
-    return res.json(result.rows);
+    const total = parseInt(countResult.rows[0].count, 10);
+    return res.json({
+      data: dataResult.rows,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    });
   } catch (error) {
     return next(error);
   }

@@ -1,85 +1,64 @@
 const { query } = require('../database/postgres');
 const { processarPartidas, formatarRodada } = require('../utils/partidas');
 
-// Helper: Enriquecer rodadas com nomes (sem fazer cálculos pesados)
-const enriquecerRodadasRapido = async (rodadas) => {
-  if (!Array.isArray(rodadas) || rodadas.length === 0) return [];
+/**
+ * Enriquece rodadas com nomes de jogadores e times.
+ * Busca todos os jogadores e times necessários em uma única consulta e mapeia.
+ */
+const enriquecerRodadas = async (rodadas) => {
+  if (!rodadas || rodadas.length === 0) return rodadas;
 
-  // Coletar todos os IDs de jogadores e times
+  // Coletar todos os IDs de jogadores e times das rodadas
   const jogadorIds = new Set();
   const timeIds = new Set();
 
   for (const rodada of rodadas) {
-    // Assegurar que partidas é um array
-    const partidas = Array.isArray(rodada.partidas) ? rodada.partidas : [];
-    
-    for (const partida of partidas) {
-      // Converter para int para evitar problemas
-      const timeCasa = parseInt(partida.timeCasa, 10);
-      const timeFora = parseInt(partida.timeFora, 10);
-      
-      if (!isNaN(timeCasa)) timeIds.add(timeCasa);
-      if (!isNaN(timeFora)) timeIds.add(timeFora);
-      
-      // Desempenhos também deve ser array
-      const desempenhos = Array.isArray(partida.desempenhos) ? partida.desempenhos : [];
-      for (const desempenho of desempenhos) {
-        if (desempenho?.jogador_id) jogadorIds.add(desempenho.jogador_id);
+    for (const partida of rodada.partidas ?? []) {
+      timeIds.add(Number(partida.timeCasa));
+      timeIds.add(Number(partida.timeFora));
+      for (const desemp of partida.desempenhos ?? []) {
+        jogadorIds.add(Number(desemp.jogador_id));
       }
     }
   }
 
-  // Bulk query: carregar nomes dos jogadores
-  const jogadoresMap = new Map();
-  if (jogadorIds.size > 0) {
-    try {
-      const jogadoresResult = await query(
-        'SELECT id, nome FROM jogadores WHERE id = ANY($1::int[])',
-        [Array.from(jogadorIds)]
-      );
-      for (const j of jogadoresResult.rows) {
-        jogadoresMap.set(j.id, j.nome);
-      }
-    } catch (err) {
-      console.error('[WARN] Falha ao carregar jogadores:', err.message);
-    }
-  }
+  if (jogadorIds.size === 0 && timeIds.size === 0) return rodadas;
 
-  // Bulk query: carregar nomes dos times
-  const timesMap = new Map();
-  if (timeIds.size > 0) {
-    try {
-      const timesResult = await query(
-        'SELECT id, name FROM times WHERE id = ANY($1::int[])',
-        [Array.from(timeIds)]
-      );
-      for (const t of timesResult.rows) {
-        timesMap.set(t.id, t.name);
-      }
-    } catch (err) {
-      console.error('[WARN] Falha ao carregar times:', err.message);
-    }
-  }
+  // Buscar nomes de jogadores e times
+  const [jogRes, timRes] = await Promise.all([
+    jogadorIds.size > 0
+      ? query(
+          'SELECT id, nome FROM jogadores WHERE id = ANY($1::int[])',
+          [Array.from(jogadorIds)]
+        )
+      : Promise.resolve({ rows: [] }),
+    timeIds.size > 0
+      ? query(
+          'SELECT id, name FROM times WHERE id = ANY($1::int[])',
+          [Array.from(timeIds)]
+        )
+      : Promise.resolve({ rows: [] }),
+  ]);
 
-  // Enriquecer rodadas com nomes de jogadores/times primeiro
-  return rodadas.map(rodada => ({
-    id: rodada.id,
-    data: rodada.data,
-    numeroRodada: rodada.numeroRodada ?? rodada.id,
-    partidas: (Array.isArray(rodada.partidas) ? rodada.partidas : []).map(partida => ({
-      id: partida.id,
-      timeCasa: partida.timeCasa,
-      timeCasaNome: timesMap.get(parseInt(partida.timeCasa, 10)) || 'Desconhecido',
-      timeFora: partida.timeFora,
-      timeForaNome: timesMap.get(parseInt(partida.timeFora, 10)) || 'Desconhecido',
-      placar: partida.placar,
-      data: partida.data,
-      desempenhos: (Array.isArray(partida.desempenhos) ? partida.desempenhos : []).map(des => ({
-        jogador_nome: jogadoresMap.get(des.jogador_id) || 'Desconhecido',
-        jogador_id: des.jogador_id,
-        ...des,
-      })),
-    })),
+  const jogadorMap = new Map(jogRes.rows.map((j) => [j.id, j.nome]));
+  const timeMap = new Map(timRes.rows.map((t) => [t.id, t.name]));
+
+  // Enriquecer rodadas com nomes
+  return rodadas.map((rodada) => ({
+    ...rodada,
+    partidas: (rodada.partidas ?? []).map((partida) => {
+      const timeCasaId = Number(partida.timeCasa);
+      const timeForaId = Number(partida.timeFora);
+      return {
+        ...partida,
+        timeCasaNome: timeMap.get(timeCasaId) ?? null,
+        timeForaNome: timeMap.get(timeForaId) ?? null,
+        desempenhos: (partida.desempenhos ?? []).map((desemp) => ({
+          ...desemp,
+          jogador_nome: jogadorMap.get(Number(desemp.jogador_id)) ?? null,
+        })),
+      };
+    }),
   }));
 };
 
@@ -100,7 +79,9 @@ const createRodada = async (req, res, next) => {
       [data, JSON.stringify(processarPartidas(partidas))]
     );
 
-    return res.status(201).json(formatarRodada(result.rows[0]));
+    let rodada = formatarRodada(result.rows[0]);
+    const rodadas = await enriquecerRodadas([rodada]);
+    return res.status(201).json(rodadas[0]);
   } catch (error) {
     return next(error);
   }
@@ -113,16 +94,14 @@ const getAllRodadas = async (req, res, next) => {
     const offset = (page - 1) * limit;
 
     const [dataResult, countResult] = await Promise.all([
-      query(
-        'SELECT id, data, partidas FROM rodadas ORDER BY id ASC LIMIT $1 OFFSET $2',
-        [limit, offset]
-      ),
+      query('SELECT id, data, partidas FROM rodadas ORDER BY id ASC LIMIT $1 OFFSET $2', [limit, offset]),
       query('SELECT COUNT(*) FROM rodadas'),
     ]);
 
     const total = parseInt(countResult.rows[0].count, 10);
-    const rodadas = await enriquecerRodadasRapido(dataResult.rows);
-    
+    let rodadas = dataResult.rows.map(formatarRodada);
+    rodadas = await enriquecerRodadas(rodadas);
+
     return res.json({
       data: rodadas,
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
@@ -171,9 +150,11 @@ const searchRodadas = async (req, res, next) => {
     ]);
 
     const total = parseInt(countResult.rows[0].count, 10);
-    
+    let rodadas = dataResult.rows.map(formatarRodada);
+    rodadas = await enriquecerRodadas(rodadas);
+
     return res.json({
-      data: dataResult.rows,
+      data: rodadas,
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
   } catch (error) {
@@ -187,8 +168,10 @@ const getRodadaById = async (req, res, next) => {
     const result = await query('SELECT id, data, partidas FROM rodadas WHERE id = $1', [id]);
 
     if (!result.rows[0]) return res.status(404).send('Rodada nao encontrada.');
-    
-    return res.json(result.rows[0]);
+
+    let rodada = formatarRodada(result.rows[0]);
+    const rodadas = await enriquecerRodadas([rodada]);
+    return res.json(rodadas[0]);
   } catch (error) {
     return next(error);
   }
@@ -214,7 +197,10 @@ const updateRodada = async (req, res, next) => {
     );
 
     if (!result.rows[0]) return res.status(404).send('Rodada nao encontrada.');
-    return res.json(formatarRodada(result.rows[0]));
+
+    let rodada = formatarRodada(result.rows[0]);
+    const rodadas = await enriquecerRodadas([rodada]);
+    return res.json(rodadas[0]);
   } catch (error) {
     return next(error);
   }

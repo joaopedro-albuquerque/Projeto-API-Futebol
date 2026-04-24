@@ -5,7 +5,11 @@
   "main": "src/app.js",
   "scripts": {
     "dev": "nodemon api-futebol/src/app.js",
-    "start": "node api-futebol/src/app.js"
+    "start": "node api-futebol/src/app.js",
+    "fill:idades": "node scripts/fill-idades.js",
+    "fill:idades:dry": "node scripts/fill-idades.js --dry-run",
+    "scrape:stats": "node scripts/scrape-365scores.js",
+    "scrape:stats:dry": "node scripts/scrape-365scores.js --dry-run"
   },
   "keywords": [],
   "author": "",

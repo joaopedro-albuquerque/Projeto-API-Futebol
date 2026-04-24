@@ -137,11 +137,101 @@ const createPartida = async (req, res, next) => {
 
 const getAllPartidas = async (req, res, next) => {
   try {
-    const result = await query('SELECT id, data, partidas FROM rodadas ORDER BY id ASC');
-    const partidas = result.rows.flatMap(formatarPartidasDaRodada);
-    const timeMap = await montarMapaTimes();
-    const partidasComNomes = anexarNomeTimes(partidas, timeMap);
-    return res.json(partidasComNomes);
+    const page   = Math.max(1, parseInt(req.query.page,  10) || 1);
+    const limit  = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const offset = (page - 1) * limit;
+
+    // Obter contagem total de partidas em todas as rodadas
+    const countResult = await query(
+      'SELECT COUNT(*) as total FROM rodadas, LATERAL jsonb_array_elements(rodadas.partidas) as p'
+    );
+    const total = parseInt(countResult.rows[0].total, 10);
+
+    // Obter partidas com LIMIT/OFFSET no banco (muito mais eficiente)
+    const result = await query(`
+      SELECT 
+        r.id as rodada_id,
+        r.data as data_rodada,
+        p->>'id' as id,
+        p->>'numeroPartida' as numeroPartida,
+        (p->>'timeCasa')::int as timeCasa,
+        (p->>'timeFora')::int as timeFora,
+        p->>'placar' as placar,
+        p->>'data' as data_partida,
+        p->'desempenhos' as desempenhos
+      FROM rodadas r,
+      LATERAL jsonb_array_elements(r.partidas) as p
+      ORDER BY r.id ASC, (p->>'numeroPartida')::int ASC
+      LIMIT $1 OFFSET $2
+    `, [limit, offset]);
+
+    // Pré-carregar IDs de times e jogadores
+    const timeIds = new Set();
+    const jogadorIds = new Set();
+    
+    for (const p of result.rows) {
+      if (p.timecasa) timeIds.add(parseInt(p.timecasa, 10));
+      if (p.timefora) timeIds.add(parseInt(p.timefora, 10));
+      
+      // Coletar IDs de jogadores dos desempenhos
+      if (Array.isArray(p.desempenhos)) {
+        for (const desempenho of p.desempenhos) {
+          if (desempenho.jogador_id) {
+            jogadorIds.add(parseInt(desempenho.jogador_id, 10));
+          }
+        }
+      }
+    }
+
+    // Bulk query: nomes dos times
+    const timeMap = new Map();
+    if (timeIds.size > 0) {
+      const timesResult = await query(
+        'SELECT id, name FROM times WHERE id = ANY($1::int[])',
+        [Array.from(timeIds)]
+      );
+      for (const t of timesResult.rows) {
+        timeMap.set(t.id, t.name);
+      }
+    }
+
+    // Bulk query: nomes dos jogadores
+    const jogadorMap = new Map();
+    if (jogadorIds.size > 0) {
+      const jogadoresResult = await query(
+        'SELECT id, nome FROM jogadores WHERE id = ANY($1::int[])',
+        [Array.from(jogadorIds)]
+      );
+      for (const j of jogadoresResult.rows) {
+        jogadorMap.set(j.id, j.nome);
+      }
+    }
+
+    // Montar resposta com nomes dos times e jogadores
+    const partidas = result.rows.map(p => ({
+      rodada_id: parseInt(p.rodada_id, 10),
+      numeroRodada: parseInt(p.rodada_id, 10),
+      id: p.id,
+      numeroPartida: parseInt(p.numeropartida, 10),
+      timeCasa: parseInt(p.timecasa, 10),
+      timeCasaNome: timeMap.get(parseInt(p.timecasa, 10)) || 'Desconhecido',
+      timeFora: parseInt(p.timefora, 10),
+      timeForaNome: timeMap.get(parseInt(p.timefora, 10)) || 'Desconhecido',
+      placar: p.placar,
+      data: p.data_partida || p.data_rodada,
+      desempenhos: Array.isArray(p.desempenhos) 
+        ? p.desempenhos.map(d => ({
+            ...d,
+            jogador_id: parseInt(d.jogador_id, 10),
+            jogador_nome: jogadorMap.get(parseInt(d.jogador_id, 10)) || 'Desconhecido',
+          }))
+        : [],
+    }));
+
+    return res.json({
+      data: partidas,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    });
   } catch (error) {
     return next(error);
   }
@@ -264,24 +354,90 @@ const deletePartida = async (req, res, next) => {
 const searchPartidas = async (req, res, next) => {
   try {
     const nome = String(req.query.nome || '').trim();
+    const page   = Math.max(1, parseInt(req.query.page,  10) || 1);
+    const limit  = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const offset = (page - 1) * limit;
 
     if (!nome) {
       return res.status(400).json({ message: 'Informe o parametro nome para pesquisa.' });
     }
 
-    const result = await query('SELECT id, data, partidas FROM rodadas ORDER BY id ASC');
+    // Buscar rodadas e partidas com nomes de times
+    const result = await query(`
+      SELECT DISTINCT r.id, r.data, r.partidas
+      FROM rodadas r
+      JOIN LATERAL jsonb_array_elements(r.partidas) p ON TRUE
+      JOIN times tc ON tc.id = (p->>'timeCasa')::int
+      JOIN times tf ON tf.id = (p->>'timeFora')::int
+      WHERE tc.name ILIKE $1 OR tf.name ILIKE $1
+      ORDER BY r.id ASC
+    `, [`%${nome}%`]);
+
+    // Extrair todas as partidas que correspondem à busca
     const allPartidas = result.rows.flatMap(formatarPartidasDaRodada);
-    const timeMap = await montarMapaTimes();
-    const partidasComNomes = anexarNomeTimes(allPartidas, timeMap);
+    
+    // Coletar IDs de times e jogadores
+    const timeIds = new Set();
+    const jogadorIds = new Set();
+    
+    for (const p of allPartidas) {
+      if (p.timeCasa) timeIds.add(p.timeCasa);
+      if (p.timeFora) timeIds.add(p.timeFora);
+      
+      if (Array.isArray(p.desempenhos)) {
+        for (const desempenho of p.desempenhos) {
+          if (desempenho.jogador_id) {
+            jogadorIds.add(desempenho.jogador_id);
+          }
+        }
+      }
+    }
 
-    const termo = nome.toLowerCase();
-    const filtradas = partidasComNomes.filter((partida) => {
-      const casa = String(partida.timeCasaNome || '').toLowerCase();
-      const fora = String(partida.timeForaNome || '').toLowerCase();
-      return casa.includes(termo) || fora.includes(termo);
+    // Bulk query: nomes dos times
+    const timeMap = new Map();
+    if (timeIds.size > 0) {
+      const timesResult = await query(
+        'SELECT id, name FROM times WHERE id = ANY($1::int[])',
+        [Array.from(timeIds)]
+      );
+      for (const t of timesResult.rows) {
+        timeMap.set(t.id, t.name);
+      }
+    }
+
+    // Bulk query: nomes dos jogadores
+    const jogadorMap = new Map();
+    if (jogadorIds.size > 0) {
+      const jogadoresResult = await query(
+        'SELECT id, nome FROM jogadores WHERE id = ANY($1::int[])',
+        [Array.from(jogadorIds)]
+      );
+      for (const j of jogadoresResult.rows) {
+        jogadorMap.set(j.id, j.nome);
+      }
+    }
+
+    // Enriquecer partidas com nomes e paginar
+    const partidasEnriquecidas = allPartidas.map(p => ({
+      ...p,
+      timeCasaNome: timeMap.get(p.timeCasa) || 'Desconhecido',
+      timeForaNome: timeMap.get(p.timeFora) || 'Desconhecido',
+      desempenhos: Array.isArray(p.desempenhos)
+        ? p.desempenhos.map(d => ({
+            ...d,
+            jogador_id: parseInt(d.jogador_id, 10),
+            jogador_nome: jogadorMap.get(parseInt(d.jogador_id, 10)) || 'Desconhecido',
+          }))
+        : [],
+    }));
+
+    const total = partidasEnriquecidas.length;
+    const paginadas = partidasEnriquecidas.slice(offset, offset + limit);
+
+    return res.json({
+      data: paginadas,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
-
-    return res.json(filtradas);
   } catch (error) {
     return next(error);
   }

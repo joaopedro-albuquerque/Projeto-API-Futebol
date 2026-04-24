@@ -8,6 +8,14 @@ api-futebol/.env
 !.env.example
 !api-futebol/.env.example
 
+#Scripts
+sync-brasileirao.js
+debug-api.js
+fill-idades.js
+scrape-365scores.js
+debug-member.js
+
+
 # Logs
 npm-debug.log*
 yarn-debug.log*
