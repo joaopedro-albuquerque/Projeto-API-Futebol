@@ -1,4 +1,4 @@
-# API Futebol
+# API Brasileirão/CDB
 
 API REST para gerenciamento de jogadores, times e rodadas, com persistencia em PostgreSQL.
 
@@ -15,27 +15,6 @@ API REST para gerenciamento de jogadores, times e rodadas, com persistencia em P
    - nota da partida do jogador (escala de 1.0 a 10.0)
 - Swagger/OpenAPI em /api-docs
 - Criacao automatica de schema/tabelas ao subir a API
-
-## Estrutura
-```text
-api-futebol/
-   src/
-      app.js
-      controllers/
-         jogadores.js
-         times.js
-         rodadas.js
-      routes/
-         jogadores.js
-         times.js
-         rodadas.js
-      database/
-         postgres.js
-      docs/
-         openapi.js
-      middleware/
-         errorHandler.js
-```
 
 ## Requisitos
 - Node.js 18+

@@ -11,9 +11,13 @@ const openApiSpec = {
   },
   servers: [
     {
+      url: '/',
+      description: 'Servidor Atual',
+    },
+    {
       url: 'http://localhost:3000',
       description: 'Ambiente local',
-    },
+    }
   ],
   tags: [
     { name: 'Jogadores', description: 'Gerenciamento de jogadores e importacao massiva' },

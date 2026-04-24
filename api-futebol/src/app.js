@@ -16,8 +16,13 @@ const { buildOpenApiSpec } = require('./docs/buildOpenApi');
 
 const app = express();
 
+app.use(cors({
+  origin: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  credentials: true
+}));
 app.use(requestLogger);
-app.use(cors());
 app.use(express.json());
 
 app.use('/api/jogadores', jogadoresRoutes);
