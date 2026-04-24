@@ -4,6 +4,7 @@ const timesController = require('../controllers/times');
 
 // Route to get all teams
 router.get('/', timesController.getAllTeams);
+router.get('/search', timesController.searchTeams);
 
 // Route to get a team by ID
 router.get('/:id', timesController.getTeamById);

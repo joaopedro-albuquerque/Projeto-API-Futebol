@@ -93,10 +93,12 @@ Importante:
 
 ### Rodada
 Cada rodada possui:
+- numeroRodada (retornado pela API com base no id)
 - data
 - partidas
 
 Cada partida pode conter:
+- numeroPartida
 - timeCasa
 - timeFora
 - golsTimeCasa
@@ -183,6 +185,7 @@ Exemplo de criacao de rodada com desempenho:
    "data": "2025-09-14",
    "partidas": [
       {
+         "numeroPartida": 1,
          "timeCasa": 1,
          "timeFora": 2,
          "golsTimeCasa": 2,
@@ -190,21 +193,64 @@ Exemplo de criacao de rodada com desempenho:
          "desempenhos": [
             {
                "jogador_id": 10,
+               "minutos": 90,
                "gols": 1,
                "assistencias": 1,
-               "defesas": 0,
-               "passes_certos": 47,
-               "passes_errados": 9,
+               "xg": 0.25,
+               "total_chutes": 6,
+               "chutes_no_gol": 1,
+               "xgot": 0.07,
+               "chutes_fora": 1,
+               "trave": 1,
+               "xa": 0.32,
+               "passes_completos": 32,
+               "passes_tentados": 39,
                "passes_decisivos": 3,
-               "dribles_certos": 6,
-               "dribles_errados": 2,
-               "interceptacoes": 1,
-               "finalizacoes_no_gol": 3,
-               "finalizacoes_fora": 1,
-               "cartao_amarelo": false,
-               "cartao_vermelho": false,
-               "minutos_jogados": 82
+               "chances_perigosas_criadas": 1,
+               "passes_ultimo_terco": 5,
+               "passes_para_tras": 3,
+               "cruzamentos_completos": 1,
+               "cruzamentos_tentados": 7,
+               "acoes_com_bola": 70,
+               "faltas_sofridas": 7,
+               "faltas_cometidas": 1,
+               "posse_recuperada_terco_final": 4,
+               "posse_perdida": 19,
+               "driblado": 0,
+               "chutes_bloqueados": 4,
+               "perigo_afastado": 0,
+               "interceptacoes": 0,
+               "recuperacoes_posse": 6,
+               "duelos_aereos_ganhos": 1,
+               "duelos_aereos_totais": 2,
+               "duelos_chao_ganhos": 7,
+               "duelos_chao_totais": 12
             }
+         ]
+      }
+   ]
+}
+```
+
+Exemplo de retorno organizado por relacionamento:
+```json
+{
+   "id": 1,
+   "numeroRodada": 1,
+   "data": "2025-09-14",
+   "partidas": [
+      {
+         "numeroPartida": 1,
+         "desempenhos": [
+            { "jogador_id": 10, "nota": 8.8 },
+            { "jogador_id": 11, "nota": 7.4 }
+         ]
+      },
+      {
+         "numeroPartida": 2,
+         "desempenhos": [
+            { "jogador_id": 12, "nota": 6.9 },
+            { "jogador_id": 13, "nota": 7.1 }
          ]
       }
    ]

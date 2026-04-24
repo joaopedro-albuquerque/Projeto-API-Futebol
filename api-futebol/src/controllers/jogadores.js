@@ -45,6 +45,30 @@ const getAllPlayers = async (req, res, next) => {
   }
 };
 
+const searchPlayers = async (req, res, next) => {
+  try {
+    const nome = String(req.query.nome || '').trim();
+
+    if (!nome) {
+      return res.status(400).json({ message: 'Informe o parametro nome para pesquisa.' });
+    }
+
+    const result = await query(
+      `
+        SELECT id, nome, idade, time_id, posicao, valor_mercado
+        FROM jogadores
+        WHERE nome ILIKE $1
+        ORDER BY id ASC
+      `,
+      [`%${nome}%`]
+    );
+
+    return res.json(result.rows);
+  } catch (error) {
+    return next(error);
+  }
+};
+
 const getPlayerById = async (req, res, next) => {
   try {
     const id = Number(req.params.id);
@@ -189,6 +213,7 @@ const importPlayers = async (req, res, next) => {
 module.exports = {
   createPlayer,
   getAllPlayers,
+  searchPlayers,
   getPlayerById,
   updatePlayer,
   deletePlayer,

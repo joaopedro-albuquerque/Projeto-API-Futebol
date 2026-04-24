@@ -34,6 +34,30 @@ const getAllTeams = async (req, res, next) => {
   }
 };
 
+const searchTeams = async (req, res, next) => {
+  try {
+    const nome = String(req.query.nome || '').trim();
+
+    if (!nome) {
+      return res.status(400).json({ message: 'Informe o parametro nome para pesquisa.' });
+    }
+
+    const result = await query(
+      `
+        SELECT id, name, city, players
+        FROM times
+        WHERE name ILIKE $1 OR city ILIKE $1
+        ORDER BY id ASC
+      `,
+      [`%${nome}%`]
+    );
+
+    return res.json(result.rows);
+  } catch (error) {
+    return next(error);
+  }
+};
+
 const getTeamById = async (req, res, next) => {
   try {
     const id = Number(req.params.id);
@@ -90,6 +114,7 @@ const deleteTeam = async (req, res, next) => {
 module.exports = {
   createTeam,
   getAllTeams,
+  searchTeams,
   getTeamById,
   updateTeam,
   deleteTeam,
