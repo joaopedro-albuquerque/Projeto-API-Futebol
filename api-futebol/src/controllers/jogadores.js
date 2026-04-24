@@ -1,4 +1,20 @@
 const { query } = require('../database/postgres');
+const { parseTabularFile, toNullableNumber, toNullableString } = require('../utils/csv');
+
+const resolveTimeId = async (row) => {
+  const directId = toNullableNumber(row.time_id);
+  if (directId != null) return directId;
+
+  const nomeTime = toNullableString(row.time_nome || row.time || row.nome_time);
+  if (!nomeTime) return null;
+
+  const result = await query(
+    'SELECT id FROM times WHERE name ILIKE $1 ORDER BY id ASC LIMIT 1',
+    [nomeTime]
+  );
+
+  return result.rows[0]?.id ?? null;
+};
 
 const createPlayer = async (req, res, next) => {
   try {
@@ -138,72 +154,55 @@ const deletePlayer = async (req, res, next) => {
   }
 };
 
-const importPlayers = async (req, res, next) => {
+const importPlayersCsv = async (req, res, next) => {
   try {
-    const { jogadores } = req.body;
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({ message: 'Envie um arquivo no campo file (CSV ou XLSX).' });
+    }
 
-    if (!Array.isArray(jogadores) || jogadores.length === 0) {
-      return res.status(400).json({ message: 'Campo obrigatorio: jogadores (array nao vazio).' });
+    const rows = parseTabularFile(req.file.buffer, req.file.mimetype);
+
+    if (rows.length === 0) {
+      return res.status(400).json({ message: 'Envie um CSV com pelo menos uma linha de dados.' });
     }
 
     const criados = [];
-    const atualizados = [];
     const erros = [];
 
-    for (const jogador of jogadores) {
-      const {
-        id,
-        nome,
-        idade,
-        time_id = null,
-        posicao = null,
-        valor_mercado = null,
-      } = jogador;
+    for (const row of rows) {
+      const nome = toNullableString(row.nome);
+      const idade = toNullableNumber(row.idade);
+      const posicao = toNullableString(row.posicao);
+      const valor_mercado = toNullableString(row.valor_mercado);
+      const time_id = await resolveTimeId(row);
 
-      if (!nome || typeof idade !== 'number') {
-        erros.push({ jogador, motivo: 'nome e idade (number) sao obrigatorios' });
+      if (!nome || idade == null) {
+        erros.push({ linha: row, motivo: 'nome e idade sao obrigatorios.' });
         continue;
       }
 
-      if (time_id !== null) {
-        const timeExiste = await query('SELECT id FROM times WHERE id = $1', [time_id]);
-        if (!timeExiste.rows[0]) {
-          erros.push({ jogador, motivo: `time_id ${time_id} nao encontrado` });
-          continue;
-        }
+      if ((row.time_id || row.time_nome || row.time || row.nome_time) && time_id == null) {
+        erros.push({ linha: row, motivo: 'time nao encontrado para a linha informada.' });
+        continue;
       }
 
-      if (id !== undefined) {
-        const result = await query(
-          `UPDATE jogadores
-           SET nome = $1, idade = $2, time_id = $3, posicao = $4, valor_mercado = $5
-           WHERE id = $6
-           RETURNING id, nome, idade, time_id, posicao, valor_mercado`,
-          [nome, idade, time_id, posicao, valor_mercado, id]
-        );
-        if (result.rows[0]) {
-          atualizados.push(result.rows[0]);
-        } else {
-          erros.push({ jogador, motivo: `id ${id} nao encontrado` });
-        }
-      } else {
-        const result = await query(
-          `INSERT INTO jogadores (nome, idade, time_id, posicao, valor_mercado)
-           VALUES ($1, $2, $3, $4, $5)
-           RETURNING id, nome, idade, time_id, posicao, valor_mercado`,
-          [nome, idade, time_id, posicao, valor_mercado]
-        );
-        criados.push(result.rows[0]);
-      }
+      const result = await query(
+        `
+          INSERT INTO jogadores (nome, idade, time_id, posicao, valor_mercado)
+          VALUES ($1, $2, $3, $4, $5)
+          RETURNING id, nome, idade, time_id, posicao, valor_mercado
+        `,
+        [nome, idade, time_id, posicao, valor_mercado]
+      );
+
+      criados.push(result.rows[0]);
     }
 
     return res.status(207).json({
       criados: criados.length,
-      atualizados: atualizados.length,
       erros: erros.length,
       jogadores_criados: criados,
-      jogadores_atualizados: atualizados,
-      jogadores_com_erro: erros,
+      linhas_com_erro: erros,
     });
   } catch (error) {
     return next(error);
@@ -217,5 +216,5 @@ module.exports = {
   getPlayerById,
   updatePlayer,
   deletePlayer,
-  importPlayers,
+  importPlayersCsv,
 };

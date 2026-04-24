@@ -3,10 +3,22 @@ const toNumberOrDefault = (value, defaultValue = 0) => {
   return Number.isFinite(num) ? num : defaultValue;
 };
 
+const isGoalkeeperPerformance = (d) => {
+  const posicao = String(d.posicao || '').trim().toLowerCase();
+  return d.is_goleiro === true || posicao === 'goleiro';
+};
+
 const calcularDesempenho = (d) => {
+  const is_goleiro = isGoalkeeperPerformance(d);
+  const posicao = d.posicao ?? null;
   const gols = toNumberOrDefault(d.gols);
   const assistencias = toNumberOrDefault(d.assistencias);
   const defesas = toNumberOrDefault(d.defesas);
+  const defesas_importantes = toNumberOrDefault(d.defesas_importantes);
+  const gols_sofridos = toNumberOrDefault(d.gols_sofridos);
+  const penaltis_defendidos = toNumberOrDefault(d.penaltis_defendidos);
+  const saidas_certas = toNumberOrDefault(d.saidas_certas);
+  const jogo_sem_sofrer_gol = d.jogo_sem_sofrer_gol ?? false;
   const xg = toNumberOrDefault(d.xg, 0);
   const xa = toNumberOrDefault(d.xa, 0);
   const total_chutes = toNumberOrDefault(d.total_chutes, 0);
@@ -75,30 +87,42 @@ const calcularDesempenho = (d) => {
     : null;
 
   let nota = 6.0;
-  nota += gols * 0.8;
-  nota += assistencias * 0.5;
-  nota += xg * 0.2;
-  nota += xa * 0.3;
-  nota += passes_decisivos * 0.3;
-  nota += chances_perigosas_criadas * 0.25;
-  nota += interceptacoes * 0.2;
-  nota += recuperacoes_posse * 0.05;
-  nota += posse_recuperada_terco_final * 0.1;
-  nota += defesas * 0.2;
-  nota += chutes_no_gol * 0.1;
-  nota += chutes_bloqueados * 0.05;
-  nota += perigo_afastado * 0.05;
-  nota += faltas_sofridas * 0.03;
-  nota += dribles_certos * 0.1;
-  nota -= dribles_errados * 0.05;
-  nota -= posse_perdida * 0.03;
-  nota -= faltas_cometidas * 0.05;
-  nota -= impedimentos * 0.03;
-  nota -= driblado * 0.03;
-  if (precisao_passes !== null) nota += (precisao_passes - 0.75) * 1.5;
-  if (precisao_dribles !== null) nota += (precisao_dribles - 0.5) * 0.5;
-  if (precisao_duelos_chao !== null) nota += (precisao_duelos_chao - 0.5) * 0.3;
-  if (precisao_duelos_aereos !== null) nota += (precisao_duelos_aereos - 0.5) * 0.2;
+  if (is_goleiro) {
+    nota += defesas * 0.25;
+    nota += defesas_importantes * 0.45;
+    nota += penaltis_defendidos * 1.0;
+    nota += saidas_certas * 0.08;
+    nota += perigo_afastado * 0.08;
+    nota += recuperacoes_posse * 0.04;
+    if (jogo_sem_sofrer_gol) nota += 0.6;
+    nota -= gols_sofridos * 0.35;
+    if (precisao_passes !== null) nota += (precisao_passes - 0.65) * 0.8;
+  } else {
+    nota += gols * 0.8;
+    nota += assistencias * 0.5;
+    nota += xg * 0.2;
+    nota += xa * 0.3;
+    nota += passes_decisivos * 0.3;
+    nota += chances_perigosas_criadas * 0.25;
+    nota += interceptacoes * 0.2;
+    nota += recuperacoes_posse * 0.05;
+    nota += posse_recuperada_terco_final * 0.1;
+    nota += defesas * 0.2;
+    nota += chutes_no_gol * 0.1;
+    nota += chutes_bloqueados * 0.05;
+    nota += perigo_afastado * 0.05;
+    nota += faltas_sofridas * 0.03;
+    nota += dribles_certos * 0.1;
+    nota -= dribles_errados * 0.05;
+    nota -= posse_perdida * 0.03;
+    nota -= faltas_cometidas * 0.05;
+    nota -= impedimentos * 0.03;
+    nota -= driblado * 0.03;
+    if (precisao_passes !== null) nota += (precisao_passes - 0.75) * 1.5;
+    if (precisao_dribles !== null) nota += (precisao_dribles - 0.5) * 0.5;
+    if (precisao_duelos_chao !== null) nota += (precisao_duelos_chao - 0.5) * 0.3;
+    if (precisao_duelos_aereos !== null) nota += (precisao_duelos_aereos - 0.5) * 0.2;
+  }
   if (cartao_amarelo) nota -= 0.5;
   if (cartao_vermelho) nota -= 2.0;
   if (minutos_jogados < 45) nota -= 0.5;
@@ -107,10 +131,17 @@ const calcularDesempenho = (d) => {
 
   return {
     jogador_id: d.jogador_id,
+    posicao,
+    is_goleiro,
     minutos: minutos_jogados,
     gols,
     assistencias,
     defesas,
+    defesas_importantes,
+    gols_sofridos,
+    penaltis_defendidos,
+    saidas_certas,
+    jogo_sem_sofrer_gol,
     xg,
     xa,
     total_chutes,
@@ -164,6 +195,7 @@ const processarPartidas = (partidas) =>
   (partidas ?? []).map((p, indexPartida) => ({
     ...p,
     numeroPartida: toNumberOrDefault(p.numeroPartida, indexPartida + 1),
+    dataPartida: p.dataPartida ?? p.data_partida ?? p.data_partida_iso ?? null,
     desempenhos: (p.desempenhos ?? []).map(calcularDesempenho),
   }));
 

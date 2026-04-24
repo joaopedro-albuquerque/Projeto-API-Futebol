@@ -20,9 +20,10 @@ const openApiSpec = {
     }
   ],
   tags: [
-    { name: 'Jogadores', description: 'Gerenciamento de jogadores e importacao massiva' },
+    { name: 'Jogadores', description: 'Gerenciamento de jogadores e importacao massiva por CSV ou XLSX' },
     { name: 'Times', description: 'Gerenciamento de times e seus elencos' },
     { name: 'Rodadas', description: 'Registro de rodadas, partidas e desempenho dos jogadores com calculo automatico de notas' },
+    { name: 'Partidas', description: 'Gerenciamento de partidas e importacao massiva por CSV ou XLSX' },
   ],
   paths: {
     '/api/jogadores': {
@@ -67,32 +68,34 @@ const openApiSpec = {
         },
       },
     },
-    '/api/jogadores/importar': {
+    '/api/jogadores/importar/csv': {
       post: {
         tags: ['Jogadores'],
-        summary: 'Importacao massiva de jogadores',
-        description: 'Cria ou atualiza multiplos jogadores de uma vez. Itens sem `id` sao criados; itens com `id` sao atualizados.',
+        summary: 'Importacao massiva de jogadores por arquivo',
+        description:
+          'Upload via multipart/form-data no campo file. Formatos aceitos: .csv e .xlsx.\n\n' +
+          'Formato esperado das colunas:\n' +
+          '- nome (obrigatorio)\n' +
+          '- idade (obrigatorio)\n' +
+          '- time_id (opcional) ou time_nome (opcional)\n' +
+          '- posicao (opcional)\n' +
+          '- valor_mercado (opcional)\n\n' +
+          'Exemplo CSV:\n' +
+          'nome,idade,time_nome,posicao,valor_mercado\n' +
+          'Neymar Jr,33,Santos FC,Atacante,25000000\n' +
+          'Alisson,31,Liverpool,Goleiro,28000000',
         requestBody: {
           required: true,
           content: {
-            'application/json': {
+            'multipart/form-data': {
               schema: {
                 type: 'object',
-                required: ['jogadores'],
+                required: ['file'],
                 properties: {
-                  jogadores: {
-                    type: 'array',
-                    items: {
-                      allOf: [
-                        { $ref: '#/components/schemas/JogadorInput' },
-                        {
-                          type: 'object',
-                          properties: {
-                            id: { type: 'integer', description: 'Presente para atualizar; ausente para criar' },
-                          },
-                        },
-                      ],
-                    },
+                  file: {
+                    type: 'string',
+                    format: 'binary',
+                    description: 'Arquivo .csv ou .xlsx com os jogadores.',
                   },
                 },
               },
@@ -101,23 +104,21 @@ const openApiSpec = {
         },
         responses: {
           207: {
-            description: 'Resultado da importacao',
+            description: 'Resultado da importacao do arquivo',
             content: {
               'application/json': {
                 schema: {
                   type: 'object',
                   properties: {
                     criados: { type: 'integer' },
-                    atualizados: { type: 'integer' },
                     erros: { type: 'integer' },
                     jogadores_criados: { type: 'array', items: { $ref: '#/components/schemas/Jogador' } },
-                    jogadores_atualizados: { type: 'array', items: { $ref: '#/components/schemas/Jogador' } },
-                    jogadores_com_erro: {
+                    linhas_com_erro: {
                       type: 'array',
                       items: {
                         type: 'object',
                         properties: {
-                          jogador: { type: 'object' },
+                          linha: { type: 'object' },
                           motivo: { type: 'string' },
                         },
                       },
@@ -125,17 +126,14 @@ const openApiSpec = {
                   },
                 },
                 example: {
-                  criados: 1,
-                  atualizados: 1,
+                  criados: 2,
                   erros: 1,
                   jogadores_criados: [
-                    { id: 11, nome: 'Rodrygo', idade: 23, time_id: 2, posicao: 'Atacante', valor_mercado: '80000000' },
-                  ],
-                  jogadores_atualizados: [
                     { id: 10, nome: 'Neymar Jr', idade: 33, time_id: 1, posicao: 'Atacante', valor_mercado: '25000000' },
+                    { id: 11, nome: 'Alisson', idade: 31, time_id: 2, posicao: 'Goleiro', valor_mercado: '28000000' },
                   ],
-                  jogadores_com_erro: [
-                    { jogador: { nome: 'Invalido' }, motivo: 'nome e idade (number) sao obrigatorios' },
+                  linhas_com_erro: [
+                    { linha: { nome: 'Invalido' }, motivo: 'nome e idade sao obrigatorios.' },
                   ],
                 },
               },
@@ -385,6 +383,86 @@ const openApiSpec = {
         },
       },
     },
+    '/api/partidas/importar/csv': {
+      post: {
+        tags: ['Partidas'],
+        summary: 'Importacao massiva de partidas e desempenhos por arquivo',
+        description:
+          'Upload via multipart/form-data no campo file. Formatos aceitos: .csv e .xlsx.\n\n' +
+          'Cada linha representa um jogador em uma partida. O agrupamento eh por data_rodada + data_partida + numero_partida.\n\n' +
+          'Colunas base obrigatorias:\n' +
+          '- data_rodada\n' +
+          '- numero_partida\n' +
+          '- time_casa_id ou time_casa_nome\n' +
+          '- time_fora_id ou time_fora_nome\n' +
+          '- jogador_id ou jogador_nome\n\n' +
+          'Colunas recomendadas de desempenho:\n' +
+          '- minutos, gols, assistencias, xg, xa, passes_completos, passes_tentados\n' +
+          '- para goleiros: defesas, defesas_importantes, gols_sofridos, penaltis_defendidos, saidas_certas, jogo_sem_sofrer_gol\n\n' +
+          'Exemplo CSV:\n' +
+          'data_rodada,data_partida,numero_partida,time_casa_nome,time_fora_nome,gols_time_casa,gols_time_fora,jogador_nome,minutos,gols,assistencias,defesas,defesas_importantes,gols_sofridos\n' +
+          '2026-04-20,2026-04-21,1,Santos FC,Palmeiras,2,1,Neymar Jr,90,1,1,0,0,0\n' +
+          '2026-04-20,2026-04-21,1,Santos FC,Palmeiras,2,1,Alisson,90,0,0,6,3,1',
+        requestBody: {
+          required: true,
+          content: {
+            'multipart/form-data': {
+              schema: {
+                type: 'object',
+                required: ['file'],
+                properties: {
+                  file: {
+                    type: 'string',
+                    format: 'binary',
+                    description: 'Arquivo .csv ou .xlsx com partidas e desempenhos.',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          207: {
+            description: 'Resultado da importacao do arquivo de partidas',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    partidas_importadas: { type: 'integer' },
+                    linhas_com_erro: { type: 'integer' },
+                    detalhes_partidas: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          rodada_id: { type: 'integer' },
+                          dataRodada: { type: 'string' },
+                          dataPartida: { type: 'string', nullable: true },
+                          numeroPartida: { type: 'integer' },
+                          jogadores_importados: { type: 'integer' },
+                        },
+                      },
+                    },
+                    erros: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          linha: { type: 'object' },
+                          motivo: { type: 'string' },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+        },
+      },
+    },
   },
   components: {
     parameters: {
@@ -514,6 +592,12 @@ const openApiSpec = {
                   type: 'integer',
                   description: 'Sequencia da partida dentro da rodada. Se omitido, a API define automaticamente.',
                 },
+                dataPartida: {
+                  type: 'string',
+                  format: 'date',
+                  nullable: true,
+                  description: 'Data especifica da partida. Pode ser diferente da data de inicio da rodada.',
+                },
                 timeCasa: { type: 'integer', description: 'ID do time mandante' },
                 timeFora: { type: 'integer', description: 'ID do time visitante' },
                 golsTimeCasa: { type: 'integer' },
@@ -588,6 +672,7 @@ const openApiSpec = {
           partidas: [
             {
               numeroPartida: 1,
+              dataPartida: '2025-09-15',
               timeCasa: 1,
               timeFora: 2,
               golsTimeCasa: 2,
@@ -651,6 +736,7 @@ const openApiSpec = {
           partidas: [
             {
               numeroPartida: 1,
+              dataPartida: '2025-09-15',
               timeCasa: 1,
               timeFora: 2,
               golsTimeCasa: 2,
