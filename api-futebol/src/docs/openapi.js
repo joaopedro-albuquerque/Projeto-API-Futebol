@@ -1315,6 +1315,17 @@ const openApiSpec = {
           cartao_vermelho: { type: 'boolean', default: false },
         },
       },
+      Desempenho: {
+        allOf: [
+          { $ref: '#/components/schemas/DesempenhoInput' },
+          {
+            type: 'object',
+            properties: {
+              jogador_nome: { type: 'string', description: '👤 Nome do jogador (incluido em endpoints de listagem)' },
+            },
+          },
+        ],
+      },
       PartidaInput: {
         type: 'object',
         required: ['rodada_id', 'timeCasa', 'timeFora'],
@@ -1364,29 +1375,48 @@ const openApiSpec = {
           rodada_id: { type: 'integer' },
           numeroRodada: { type: 'integer' },
           numeroPartida: { type: 'integer' },
+          id: { type: 'string', nullable: true },
           timeCasa: { type: 'integer' },
           timeFora: { type: 'integer' },
           timeCasaNome: { type: 'string', nullable: true, description: 'Nome do time mandante (incluido em endpoints de listagem)' },
           timeForaNome: { type: 'string', nullable: true, description: 'Nome do time visitante (incluido em endpoints de listagem)' },
+          placar: { type: 'string', nullable: true, description: 'Placar no formato "golsTimeCasa-golsTimeFora"' },
           golsTimeCasa: { type: 'integer' },
           golsTimeFora: { type: 'integer' },
+          data: { type: 'string', format: 'date', nullable: true, description: 'Data da partida' },
           dataRodada: { type: 'string', format: 'date', nullable: true },
           dataPartida: { type: 'string', format: 'date', nullable: true },
-          desempenhos: { type: 'array', items: { type: 'object' } },
+          desempenhos: { 
+            type: 'array', 
+            items: { $ref: '#/components/schemas/Desempenho' },
+            description: '📊 Estatisticas e desempenho dos jogadores desta partida'
+          },
         },
         example: {
           rodada_id: 1,
           numeroRodada: 1,
           numeroPartida: 1,
-          timeCasa: 1,
-          timeFora: 2,
-          timeCasaNome: 'Atletico-MG',
+          id: 'part_001',
+          timeCasa: 18,
+          timeFora: 6,
+          timeCasaNome: 'Atlético-MG',
           timeForaNome: 'Palmeiras',
+          placar: '2-1',
           golsTimeCasa: 2,
           golsTimeFora: 1,
+          data: '2026-01-28',
           dataRodada: '2026-01-25',
           dataPartida: '2026-01-28',
-          desempenhos: [],
+          desempenhos: [
+            {
+              jogador_id: 2,
+              jogador_nome: 'Everson',
+              posicao: 'goleiro',
+              minutos: 90,
+              gols: 0,
+              defesas: 6,
+            }
+          ],
         },
       },
 
